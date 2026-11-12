@@ -4,9 +4,11 @@
 # ==============================================================================
 
 # 1. Gemini API Key (Google AI Studio で取得した API キー)
+# https://aistudio.google.com/app/apikey
 GEMINI_API_KEY=
 
 # 2. LINE Messaging API (LINE Developers コンソールで取得)
+# https://developers.line.biz/console/
 # チャネル基本設定 > チャネルシークレット
 LINE_CHANNEL_SECRET=
 # Messaging API設定 > チャネルアクセストークン（長期）
@@ -14,12 +16,23 @@ LINE_CHANNEL_ACCESS_TOKEN=
 # あなたの LINE ユーザーID (Uから始まる33文字、LINE Developersの「あなたのユーザーID」)
 ALLOWED_LINE_USER_ID=
 
-# 3. Google Calendar OAuth 2.0 (Google Cloud コンソールで作成)
-# OAuth 2.0 クライアント ID (...apps.googleusercontent.com)
+# 3. Google Calendar 連携設定
+# 【方式A：サービスアカウント方式（推奨・永久無期限・審査不要）】
+# Google Cloud コンソールで「サービスアカウント」を作成し、キー（JSON）を発行します。
+# サービスアカウントのメールアドレス（...gserviceaccount.com）
+GOOGLE_SERVICE_ACCOUNT_EMAIL=
+# サービスアカウントの秘密鍵（-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----）
+GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY=
+# （または JSON 全体をそのまま 1行で指定しても構いません）
+# GOOGLE_SERVICE_ACCOUNT_KEY=
+# 予定を追加したいあなたの Google アカウントのメールアドレス（必須）
+# ※ Google カレンダーの設定で、このカレンダーに上記サービスアカウントの「予定の変更権限」を付与してください。
+GOOGLE_CALENDAR_ID=your-email@gmail.com
+
+# 【方式B：OAuth 2.0 方式（旧方式・テストモード時は7日失効）】
+# ※ サービスアカウントを設定する場合は以下の3つは空欄で構いません。
 GOOGLE_CLIENT_ID=
-# OAuth 2.0 クライアント シークレット
 GOOGLE_CLIENT_SECRET=
-# Google Calendar API 操作用のリフレッシュトークン (1//...)
 GOOGLE_REFRESH_TOKEN=
 
 # 4. 任意設定 (本番 Webhook 疎通検証スクリプト用)

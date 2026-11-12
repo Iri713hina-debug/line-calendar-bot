@@ -2,8 +2,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
 import { readFileSync } from 'node:fs';
-import { createHmac } from 'node:crypto';
+import { createHmac, generateKeyPairSync } from 'node:crypto';
 import { createHandler } from '../src/worker.mjs';
+import { createServiceAccountToken, insertCalendar } from '../src/services.mjs';
 import { calendarPayload, eventFingerprint, isMeetingUrl, japanDate, normalizeJapanTime, parseJapanTime, prepareSource, reminderMinutesForPrevDay8pm, validateExtraction, verifySignature } from '../src/core.mjs';
 
 const NOW = Date.parse('2026-11-09T14:00:00Z');
@@ -457,4 +458,114 @@ test('primary model failure automatically falls back to secondary model within b
   assert.equal(primaryCalled, true);
   assert.equal(fallbackCalled, true);
   assert.equal(events.length, 1);
+});
+
+test('service account token creation generates signed JWT and exchanges for access token', async () => {
+  const { privateKey } = generateKeyPairSync('rsa', {
+    modulusLength: 2048,
+    publicKeyEncoding: { type: 'spki', format: 'pem' },
+    privateKeyEncoding: { type: 'pkcs8', format: 'pem' }
+  });
+  let tokenRequestBody = '';
+  const fetcher = async (url, init) => {
+    if (url === 'https://oauth2.googleapis.com/token') {
+      tokenRequestBody = init.body;
+      return json({ access_token: 'sa-access-token-123' });
+    }
+    return json({}, 404);
+  };
+  const token = await createServiceAccountToken('test-sa@example.iam.gserviceaccount.com', privateKey, fetcher);
+  assert.equal(token, 'sa-access-token-123');
+  assert.match(tokenRequestBody, /grant_type=urn%3Aietf%3Aparams%3Aoauth%3Agrant-type%3Ajwt-bearer/);
+  assert.match(tokenRequestBody, /assertion=[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/);
+});
+
+test('insertCalendar with service account configuration creates event on specified calendar', async () => {
+  const { privateKey } = generateKeyPairSync('rsa', {
+    modulusLength: 2048,
+    publicKeyEncoding: { type: 'spki', format: 'pem' },
+    privateKeyEncoding: { type: 'pkcs8', format: 'pem' }
+  });
+  const env = {
+    GOOGLE_SERVICE_ACCOUNT_EMAIL: 'test-sa@example.iam.gserviceaccount.com',
+    GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY: privateKey,
+    GOOGLE_CALENDAR_ID: 'user@example.com'
+  };
+  let requestedCalendarUrl = '';
+  const fetcher = async (url, init) => {
+    if (url === 'https://oauth2.googleapis.com/token') {
+      return json({ access_token: 'sa-test-token' });
+    }
+    if (url.includes('www.googleapis.com/calendar/v3')) {
+      requestedCalendarUrl = url;
+      return json({
+        id: 'fp123',
+        status: 'confirmed',
+        htmlLink: 'https://calendar.google.com/calendar/event?eid=sa-test',
+        extendedProperties: { private: { lineJobCalendarFingerprint: 'fp123' } }
+      });
+    }
+    return json({}, 404);
+  };
+  const event = { ...sampleEvent(), links: ['https://example.com/join'] };
+  const link = await insertCalendar(env, event, 'fp123', fetcher);
+  assert.equal(link, 'https://calendar.google.com/calendar/event?eid=sa-test');
+  assert.match(requestedCalendarUrl, /calendars\/user%40example\.com\/events/);
+});
+
+test('insertCalendar with service account JSON key works and requires GOOGLE_CALENDAR_ID', async () => {
+  const { privateKey } = generateKeyPairSync('rsa', {
+    modulusLength: 2048,
+    publicKeyEncoding: { type: 'spki', format: 'pem' },
+    privateKeyEncoding: { type: 'pkcs8', format: 'pem' }
+  });
+  const jsonKey = JSON.stringify({
+    client_email: 'json-sa@example.iam.gserviceaccount.com',
+    private_key: privateKey
+  });
+  const envWithoutCalId = {
+    GOOGLE_SERVICE_ACCOUNT_KEY: jsonKey
+  };
+  const event = { ...sampleEvent(), links: [] };
+  await assert.rejects(
+    () => insertCalendar(envWithoutCalId, event, 'fp_err', async () => json({})),
+    { message: /GOOGLE_CALENDAR_ID/ }
+  );
+
+  const envWithCalId = {
+    GOOGLE_SERVICE_ACCOUNT_KEY: jsonKey,
+    GOOGLE_CALENDAR_ID: 'target@gmail.com'
+  };
+  const fetcher = async (url) => {
+    if (url === 'https://oauth2.googleapis.com/token') return json({ access_token: 'json-token' });
+    return json({
+      id: 'fp_ok',
+      status: 'confirmed',
+      htmlLink: 'https://calendar.google.com/calendar/event?eid=json-ok',
+      extendedProperties: { private: { lineJobCalendarFingerprint: 'fp_ok' } }
+    });
+  };
+  const res = await insertCalendar(envWithCalId, event, 'fp_ok', fetcher);
+  assert.equal(res, 'https://calendar.google.com/calendar/event?eid=json-ok');
+});
+
+test('worker passes 503 check with service account credentials even when OAuth is empty', async () => {
+  const DB = database();
+  const env = {
+    DB,
+    LINE_CHANNEL_SECRET: 'test-secret',
+    LINE_CHANNEL_ACCESS_TOKEN: 'test-token',
+    ALLOWED_LINE_USER_ID: OWNER,
+    GEMINI_API_KEY: 'test-key',
+    GOOGLE_SERVICE_ACCOUNT_EMAIL: 'sa@example.com',
+    GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY: 'dummy-key',
+    GOOGLE_CALENDAR_ID: 'user@example.com'
+  };
+  const handler = createHandler(async () => json({}));
+  const raw = JSON.stringify({ events: [message()] });
+  const signature = createHmac('sha256', env.LINE_CHANNEL_SECRET).update(raw).digest('base64');
+  const response = await handler.fetch(new Request('https://bot.example/webhook', {
+    method: 'POST', body: raw, headers: { 'x-line-signature': signature }
+  }), env, { waitUntil: () => {} });
+  assert.equal(response.status, 200);
 });

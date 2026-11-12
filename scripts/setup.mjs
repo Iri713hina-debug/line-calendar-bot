@@ -2,11 +2,22 @@ import { execSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 
-const REQUIRED_KEYS = [
+const BASE_REQUIRED_KEYS = [
+  'GEMINI_API_KEY',
+  'LINE_CHANNEL_SECRET',
+  'LINE_CHANNEL_ACCESS_TOKEN',
+  'ALLOWED_LINE_USER_ID'
+];
+
+const ALL_POSSIBLE_KEYS = [
   'GEMINI_API_KEY',
   'LINE_CHANNEL_SECRET',
   'LINE_CHANNEL_ACCESS_TOKEN',
   'ALLOWED_LINE_USER_ID',
+  'GOOGLE_SERVICE_ACCOUNT_EMAIL',
+  'GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY',
+  'GOOGLE_SERVICE_ACCOUNT_KEY',
+  'GOOGLE_CALENDAR_ID',
   'GOOGLE_CLIENT_ID',
   'GOOGLE_CLIENT_SECRET',
   'GOOGLE_REFRESH_TOKEN'
@@ -114,7 +125,7 @@ async function main() {
   }
 
   console.log('環境変数の設定状況:');
-  for (const key of REQUIRED_KEYS) {
+  for (const key of BASE_REQUIRED_KEYS) {
     if (secrets[key]) {
       console.log(`  - ${key}: [設定済み]`);
     } else {
@@ -123,7 +134,28 @@ async function main() {
     }
   }
 
-  const validKeys = Object.keys(secrets).filter(k => REQUIRED_KEYS.includes(k));
+  const hasSA = !!(secrets.GOOGLE_SERVICE_ACCOUNT_KEY || (secrets.GOOGLE_SERVICE_ACCOUNT_EMAIL && secrets.GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY));
+  const hasOAuth = !!(secrets.GOOGLE_CLIENT_ID && secrets.GOOGLE_CLIENT_SECRET && secrets.GOOGLE_REFRESH_TOKEN);
+
+  if (hasSA) {
+    console.log('  - Google認証方式: [サービスアカウント方式 (推奨・無期限)]');
+    if (secrets.GOOGLE_CALENDAR_ID) {
+      console.log(`  - GOOGLE_CALENDAR_ID: [設定済み (${secrets.GOOGLE_CALENDAR_ID})]`);
+    } else {
+      console.log('  - GOOGLE_CALENDAR_ID: [未設定] ※サービスアカウント連携ではカレンダーID（あなたのGmailアドレス等）が必須です');
+      hasEmpty = true;
+    }
+  } else if (hasOAuth) {
+    console.log('  - Google認証方式: [OAuth 2.0 方式 (旧方式)]');
+    if (secrets.GOOGLE_CALENDAR_ID) {
+      console.log(`  - GOOGLE_CALENDAR_ID: [設定済み (${secrets.GOOGLE_CALENDAR_ID})]`);
+    }
+  } else {
+    console.log('  - Google認証方式: [未設定] (サービスアカウントまたはOAuthのいずれかを設定してください)');
+    hasEmpty = true;
+  }
+
+  const validKeys = Object.keys(secrets).filter(k => ALL_POSSIBLE_KEYS.includes(k));
   if (validKeys.length > 0) {
     console.log(`\n${validKeys.length} 件のシークレットを Cloudflare Workers に一括登録します...`);
     const tempFile = path.resolve(`.temp-secrets-${Date.now()}.json`);

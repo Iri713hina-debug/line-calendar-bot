@@ -85,16 +85,100 @@ export async function reply(env, token, messages, fetcher) {
   if (!response.ok) throw new BotError('line', 'LINEへの返信に失敗しました。');
 }
 
+function base64UrlEncode(data) {
+  const str = typeof data === 'string' ? data : String.fromCharCode(...new Uint8Array(data));
+  return btoa(str).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+function pemToDer(pem) {
+  const b64 = pem
+    .replace(/-----BEGIN [A-Z ]+-----/g, '')
+    .replace(/-----END [A-Z ]+-----/g, '')
+    .replace(/\s+/g, '');
+  const raw = atob(b64);
+  const buf = new Uint8Array(raw.length);
+  for (let i = 0; i < raw.length; i++) buf[i] = raw.charCodeAt(i);
+  return buf.buffer;
+}
+
+export async function createServiceAccountToken(email, privateKeyPem, fetcher) {
+  try {
+    const der = pemToDer(privateKeyPem);
+    const key = await crypto.subtle.importKey(
+      'pkcs8', der, { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' }, false, ['sign']
+    );
+    const now = Math.floor(Date.now() / 1000);
+    const header = { alg: 'RS256', typ: 'JWT' };
+    const claimSet = {
+      iss: email,
+      scope: 'https://www.googleapis.com/auth/calendar.events',
+      aud: 'https://oauth2.googleapis.com/token',
+      exp: now + 3600,
+      iat: now
+    };
+    const signInput = `${base64UrlEncode(JSON.stringify(header))}.${base64UrlEncode(JSON.stringify(claimSet))}`;
+    const signatureBuffer = await crypto.subtle.sign(
+      'RSASSA-PKCS1-v1_5', key, new TextEncoder().encode(signInput)
+    );
+    const jwt = `${signInput}.${base64UrlEncode(signatureBuffer)}`;
+
+    const tokenResponse = await api(fetcher, 'https://oauth2.googleapis.com/token', {
+      method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer',
+        assertion: jwt
+      }).toString()
+    });
+    if (!tokenResponse.ok) {
+      throw new BotError('google-auth', 'Googleサービスアカウントの認証に失敗しました。秘密鍵・メールアドレス・カレンダー共有設定を確認してください。');
+    }
+    const data = await tokenResponse.json();
+    if (!data.access_token) {
+      throw new BotError('google-auth', 'Googleサービスアカウントのアクセストークンを取得できませんでした。');
+    }
+    return data.access_token;
+  } catch (err) {
+    if (err instanceof BotError) throw err;
+    throw new BotError('google-auth', `サービスアカウント鍵の形式が不正です: ${err.message}`);
+  }
+}
+
 export async function insertCalendar(env, event, fingerprint, fetcher) {
-  const tokenResponse = await api(fetcher, 'https://oauth2.googleapis.com/token', {
-    method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({ client_id: env.GOOGLE_CLIENT_ID, client_secret: env.GOOGLE_CLIENT_SECRET,
-      refresh_token: env.GOOGLE_REFRESH_TOKEN, grant_type: 'refresh_token' }).toString()
-  });
-  if (!tokenResponse.ok) throw new BotError('google-auth', 'Googleとの連携を更新する必要があります。手順書に従い、リフレッシュトークンを再設定してください。');
-  const token = (await tokenResponse.json()).access_token;
-  if (!token) throw new BotError('google-auth', 'Googleの認証を確認してください。');
-  const endpoint = `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(env.GOOGLE_CALENDAR_ID || 'primary')}/events`;
+  let saEmail = env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
+  let saKey = env.GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY;
+  if (env.GOOGLE_SERVICE_ACCOUNT_KEY) {
+    try {
+      const parsed = JSON.parse(env.GOOGLE_SERVICE_ACCOUNT_KEY);
+      saEmail = saEmail || parsed.client_email;
+      saKey = saKey || parsed.private_key;
+    } catch {}
+  }
+
+  let token;
+  const isServiceAccount = !!(saEmail && saKey);
+
+  let calendarId = env.GOOGLE_CALENDAR_ID;
+  if (!calendarId) {
+    if (isServiceAccount) {
+      throw new BotError('calendar', 'サービスアカウント利用時は GOOGLE_CALENDAR_ID（あなたのGoogleアカウントのメールアドレス）の設定が必要です。');
+    }
+    calendarId = 'primary';
+  }
+
+  if (isServiceAccount) {
+    token = await createServiceAccountToken(saEmail, saKey, fetcher);
+  } else {
+    const tokenResponse = await api(fetcher, 'https://oauth2.googleapis.com/token', {
+      method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ client_id: env.GOOGLE_CLIENT_ID, client_secret: env.GOOGLE_CLIENT_SECRET,
+        refresh_token: env.GOOGLE_REFRESH_TOKEN, grant_type: 'refresh_token' }).toString()
+    });
+    if (!tokenResponse.ok) throw new BotError('google-auth', 'Googleとの連携を更新する必要があります。手順書に従い、リフレッシュトークンを再設定してください。');
+    token = (await tokenResponse.json()).access_token;
+    if (!token) throw new BotError('google-auth', 'Googleの認証を確認してください。');
+  }
+
+  const endpoint = `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events`;
   const headers = { authorization: `Bearer ${token}`, 'content-type': 'application/json' };
   let response = await api(fetcher, `${endpoint}?sendUpdates=none`, {
     method: 'POST', headers, body: JSON.stringify(calendarPayload(event, fingerprint))

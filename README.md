@@ -52,7 +52,7 @@ PCを起動し続ける必要はなく、すべて無料枠のクラウドサー
 |---|---|---|---|
 | 1 | **Google AI Studio** | `GEMINI_API_KEY` | [aistudio.google.com/app/apikey](https://aistudio.google.com/app/apikey) |
 | 2 | **LINE Developers** | `LINE_CHANNEL_SECRET`<br>`LINE_CHANNEL_ACCESS_TOKEN`<br>`ALLOWED_LINE_USER_ID` | [developers.line.biz/console](https://developers.line.biz/console/)<br>[manager.line.biz](https://manager.line.biz/) |
-| 3 | **Google Cloud & OAuth** | `GOOGLE_CLIENT_ID`<br>`GOOGLE_CLIENT_SECRET`<br>`GOOGLE_REFRESH_TOKEN` | [console.cloud.google.com](https://console.cloud.google.com/)<br>[developers.google.com/oauthplayground](https://developers.google.com/oauthplayground/) |
+| 3 | **Google Cloud**<br>（サービスアカウント） | `GOOGLE_SERVICE_ACCOUNT_EMAIL`<br>`GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY`<br>`GOOGLE_CALENDAR_ID`（あなたのGmail等） | [console.cloud.google.com](https://console.cloud.google.com/)<br>[calendar.google.com](https://calendar.google.com/) |
 | 4 | **Cloudflare** | 無料アカウント | [dash.cloudflare.com/sign-up](https://dash.cloudflare.com/sign-up) |
 
 ---
@@ -83,48 +83,44 @@ PCを起動し続ける必要はなく、すべて無料枠のクラウドサー
    - ページ内のQRコードから、作成した公式アカウントを自分のスマホのLINEで「友だち追加」しておきます。
 </details>
 
-<details>
-<summary><b>3. Google Calendar API & OAuth リフレッシュトークンの取得手順（クリックして展開）</b></summary>
+<details open>
+<summary><b>3. Google Calendar 連携の準備手順【推奨：サービスアカウント方式（審査不要・永久無期限）】（クリックして開閉）</b></summary>
 
-Googleカレンダーに予定を登録するための認証情報（Refresh Token）を取得します。
+OAuth方式（リフレッシュトークン）と異なり、**サービスアカウント方式なら有効期限切れ（7日制限）やGoogleの公開審査が一切ありません**。一度設定すれば永久に動き続けます。
 
 #### ① Google Cloud プロジェクト作成と API 有効化
 1. [Google Cloud Console](https://console.cloud.google.com/) を開き、新しいプロジェクトを作成します（例: `line-calendar-bot`）。
 2. [Google Calendar API 有効化ページ](https://console.cloud.google.com/apis/library/calendar-json.googleapis.com) を開き、**「有効にする」**をクリックします。
 
-#### ② OAuth 同意画面の設定
-1. [OAuth 同意画面](https://console.cloud.google.com/apis/credentials/consent) を開きます。
-2. User Type で **「外部」** を選択し「作成」を押します。
-3. アプリ名（例: `CalendarBot`）、ユーザーサポートメール、デベロッパーの連絡先メールを入力して「保存して次へ」を押します。
-4. 「スコープ」はそのまま「保存して次へ」。
-5. **「テストユーザー」** の画面で **「+ ADD USERS」** を押し、**予定を登録したい自分の Google アカウントのメールアドレス**を追加して「保存して次へ」を押します。
+#### ② サービスアカウントの作成と鍵（JSON）のダウンロード
+1. [IAM と管理 > サービスアカウント](https://console.cloud.google.com/iam-admin/serviceaccounts) を開きます。
+2. 上部の **「+ サービス アカウントを作成」** をクリックします。
+3. サービス アカウント名に「`calendar-bot`」など任意の名前を入力し、**「作成して続行」** → ロール選択は何も選ばず **「続行」** → **「完了」** を押します。
+4. 一覧に作成されたサービスアカウントのメールアドレス（例: `calendar-bot@xxxx.iam.gserviceaccount.com`）が表示されるのでコピーしてメモします（これが `GOOGLE_SERVICE_ACCOUNT_EMAIL` です）。
+5. そのメールアドレスをクリックし、上部の **「キー」** タブを開きます。
+6. **「鍵を追加」** → **「新しい鍵を作成」** をクリックし、キーのタイプで **「JSON」** を選択して「作成」を押します。
+7. ダウンロードされた JSON ファイルをテキストエディタで開きます：
+   - `client_email`: サービスアカウントのメールアドレス
+   - `private_key`: `-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n` で始まる秘密鍵（これが `GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY` です）
 
-#### ③ OAuth クライアント ID の作成
-1. [認証情報画面](https://console.cloud.google.com/apis/credentials) を開きます。
-2. 上部の **「+ 認証情報を作成」** → **「OAuth クライアント ID」** を選択します。
-3. アプリケーションの種類で **「ウェブ アプリケーション」** を選択します。
-4. 名前は任意（例: `Web Client`）。
-5. **「承認済みのリダイレクト URI」** に `+ URI を追加` を押し、以下を正確に入力します：
-   ```text
-   https://developers.google.com/oauthplayground
-   ```
-6. 「作成」をクリックすると表示される **「クライアント ID」** と **「クライアント シークレット」** をメモします。
+#### ③ 自分の Google カレンダーへ共有（変更権限を付与）
+1. ブラウザで [Google カレンダー (Web版)](https://calendar.google.com/) を開きます。
+2. 左メニューの「マイカレンダー」から、予定を登録したいカレンダー（通常は自分の名前のカレンダー）の右側にある縦の3点リーダー（︙）をクリックし、**「設定と共有」** を開きます。
+3. 「特定のユーザーまたはグループとの共有」セクションまでスクロールし、**「+ ユーザーおよびグループを追加」** をクリックします。
+4. **メールアドレス欄**に、先ほどメモしたサービスアカウントのメールアドレス（`...gserviceaccount.com`）を貼り付けます。
+5. **権限**を必ず **「予定の変更権限」**（または「予定の管理権限」）に変更し、「送信」を押します。
+6. 設定完了です！あなたの Google アカウントのメールアドレス（例: `your-email@gmail.com`）が `GOOGLE_CALENDAR_ID` となります。
+</details>
 
-#### ④ OAuth Playground でリフレッシュトークンを発行
-1. [Google Developers OAuth 2.0 Playground](https://developers.google.com/oauthplayground/) を開きます。
-2. 画面右上の **歯車マーク（OAuth 2.0 configuration）** をクリックします。
-3. **「Use your own OAuth credentials」** にチェックを入れます。
-4. 先ほど取得した **Client ID** と **Client Secret** を入力し、設定パネルを閉じます。
-5. 画面左側の **Step 1 (Select & authorize APIs)** の入力欄（Input your own scopes）に以下を入力し、**「Authorize APIs」** をクリックします：
-   ```text
-   https://www.googleapis.com/auth/calendar.events
-   ```
-6. Google のログイン・承認画面が表示されるので、**テストユーザーに登録した自分のアカウント** を選択し、「続行」を押してカレンダーへのアクセスを許可します。
-7. 画面が Playground に戻り **Step 2 (Exchange authorization code for tokens)** に移動するので、青い **「Exchange authorization code for tokens」** ボタンをクリックします。
-8. 右側のボックスに表示された **「Refresh token」**（`1//...` で始まる文字列）をコピーしてメモします（※ Access token ではなく Refresh token を保存してください）。
+<details>
+<summary><b>【互換用】従来の OAuth 2.0 方式で連携する場合（クリックして展開）</b></summary>
 
-> [!NOTE]
-> テストステータス（未公開）の OAuth アプリで発行されたリフレッシュトークンは、Google のセキュリティ仕様により **原則7日間で有効期限が切れます**。まずは動作を確認し、継続して利用したい場合は [Google Cloud Console の OAuth 同意画面](https://console.cloud.google.com/apis/credentials/consent) で「アプリを公開」ステータスに変更してください。
+※ サービスアカウント方式を利用する場合は設定不要です。
+
+1. [OAuth 同意画面](https://console.cloud.google.com/apis/credentials/consent) で「外部」を選択し、テストユーザーに自分の Gmail アドレスを追加。
+2. [認証情報](https://console.cloud.google.com/apis/credentials) からウェブ アプリケーションのクライアント ID を作成（リダイレクト URI に `https://developers.google.com/oauthplayground` を追加）。
+3. [OAuth Playground](https://developers.google.com/oauthplayground/) で「Use your own OAuth credentials」から Client ID/Secret を入力し、スコープ `https://www.googleapis.com/auth/calendar.events` で認証して Refresh Token を取得します。
+（※ テストモードの OAuth トークンは 7 日間で失効するためご注意ください）
 </details>
 
 <details>
@@ -172,10 +168,15 @@ LINE_CHANNEL_SECRET=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 LINE_CHANNEL_ACCESS_TOKEN=xxxxxx...
 ALLOWED_LINE_USER_ID=Uxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 
-# 3. Google Calendar OAuth 2.0
-GOOGLE_CLIENT_ID=xxxxxxxxxxxx.apps.googleusercontent.com
-GOOGLE_CLIENT_SECRET=GOCSPX-xxxxxxxxxxxxxxxx
-GOOGLE_REFRESH_TOKEN=1//04xxxxxxxxxxxxxxxxxxxxxxxxxxx
+# 3. Google Calendar 連携（サービスアカウント方式・推奨）
+GOOGLE_SERVICE_ACCOUNT_EMAIL=calendar-bot@xxxx.iam.gserviceaccount.com
+GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n"
+GOOGLE_CALENDAR_ID=your-email@gmail.com
+
+# ※ 従来の OAuth 2.0 方式を利用する場合は以下を設定（サービスアカウント利用時は不要）
+# GOOGLE_CLIENT_ID=xxxxxxxxxxxx.apps.googleusercontent.com
+# GOOGLE_CLIENT_SECRET=GOCSPX-xxxxxxxxxxxxxxxx
+# GOOGLE_REFRESH_TOKEN=1//04xxxxxxxxxxxxxxxxxxxxxxxxxxx
 ```
 
 > [!IMPORTANT]
@@ -297,13 +298,9 @@ https://example.com/survey
 
 ## 🛠️ よくある質問・トラブルシューティング
 
-### Q. Googleカレンダーのリフレッシュトークンが7日で切れてしまう
-Google Cloud の OAuth 同意画面が「テスト」ステータスの場合、発行されたリフレッシュトークンは Google のセキュリティ仕様により最長7日間で失効します。  
-**恒久的に使い続けたい場合：**
-1. [Google Cloud Console の OAuth 同意画面](https://console.cloud.google.com/apis/credentials/consent) を開きます。
-2. アプリの公開ステータスで **「アプリを公開」** ボタンをクリックします。
-3. 「確認をリクエスト」等の警告が出ますが、一般公開用の確認審査（Verification）を送信しなくても、個人利用の範囲であればトークンが7日で失効しなくなります。
-4. 再度 [OAuth Playground](https://developers.google.com/oauthplayground/) で新しい Refresh Token を取得し、`npx wrangler secret put GOOGLE_REFRESH_TOKEN` で更新してください。
+### Q. Googleカレンダーの連携は期限切れになりませんか？
+本Botは**Googleサービスアカウント方式（推奨）**に対応しているため、トークン有効期限の概念自体が存在せず、**何ヶ月・何年経っても永久に無期限で連携が持続します**。GoogleのOAuth審査や毎週の再認証に悩まされる心配はありません。  
+（※ 互換用のOAuth方式で設定した場合のみ、Googleのセキュリティ仕様によりテストアプリでは7日で失効します。特別な理由がない限りサービスアカウント方式のご利用を推奨します）
 
 ### Q. 長いメールを送ると「通信が完了しませんでした」と返ってくる
 Gemini API の呼び出しがネットワーク不調等で遅延した場合に返されます。本アプリは自動フォールバック（`gemini-3.1-flash-lite` 失敗時に `gemini-2.5-flash` へ即時切り替え）を備えていますが、数秒待ってから案内文をもう一度送信してください。
@@ -316,7 +313,7 @@ Gemini API の呼び出しがネットワーク不調等で遅延した場合に
 ## 🧑‍💻 開発者向けコマンド
 
 ```bash
-# 単体テストの実行（外部通信なし、モックDB・モックAPIで全23件を即時検証）
+# 単体テストの実行（外部通信なし、モックDB・モックAPIで全27件を即時検証）
 npm test
 
 # ローカル D1 データベースの初期化

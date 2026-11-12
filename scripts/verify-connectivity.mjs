@@ -104,8 +104,76 @@ async function verify() {
     console.log('\n3. Gemini API 疎通: GEMINI_API_KEY 未設定のためスキップ');
   }
 
-  // 4. Google Calendar OAuth (GOOGLE_CLIENT_ID / SECRET / REFRESH_TOKEN)
-  if (env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET && env.GOOGLE_REFRESH_TOKEN) {
+  // 4. Google 連携認証 (サービスアカウント方式 または OAuth 2.0 方式)
+  let saEmail = env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
+  let saKey = env.GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY;
+  if (env.GOOGLE_SERVICE_ACCOUNT_KEY) {
+    try {
+      const parsed = JSON.parse(env.GOOGLE_SERVICE_ACCOUNT_KEY);
+      saEmail = saEmail || parsed.client_email;
+      saKey = saKey || parsed.private_key;
+    } catch {}
+  }
+
+  if (saEmail && saKey) {
+    console.log('\n4. Google サービスアカウント認証テスト (推奨・無期限方式)');
+    try {
+      const header = Buffer.from(JSON.stringify({ alg: 'RS256', typ: 'JWT' })).toString('base64url');
+      const now = Math.floor(Date.now() / 1000);
+      const claim = Buffer.from(JSON.stringify({
+        iss: saEmail,
+        scope: 'https://www.googleapis.com/auth/calendar.events',
+        aud: 'https://oauth2.googleapis.com/token',
+        exp: now + 3600,
+        iat: now
+      })).toString('base64url');
+      const sign = crypto.createSign('RSA-SHA256');
+      sign.update(`${header}.${claim}`);
+      const signature = sign.sign(saKey, 'base64url');
+      const jwt = `${header}.${claim}.${signature}`;
+
+      const res = await fetch('https://oauth2.googleapis.com/token', {
+        method: 'POST',
+        headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({
+          grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer',
+          assertion: jwt
+        })
+      });
+      console.log(`   サービスアカウント トークン取得: HTTP ${res.status} ${res.statusText}`);
+      if (res.status === 200) {
+        const tokenData = await res.json();
+        console.log(`   ✓ 正常: サービスアカウント (${saEmail}) のアクセストークン取得に成功しました。`);
+        const calId = env.GOOGLE_CALENDAR_ID;
+        if (!calId) {
+          console.log('   ⚠️ GOOGLE_CALENDAR_ID が未設定です。あなたのGmailアドレスを設定して、そのカレンダーの共有設定にサービスアカウントを追加してください。');
+        } else {
+          try {
+            const calRes = await fetch(`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calId)}/events?maxResults=1`, {
+              headers: { authorization: `Bearer ${tokenData.access_token}` }
+            });
+            console.log(`\n5. Google Calendar API 共有アクセス (対象: ${calId}): HTTP ${calRes.status} ${calRes.statusText}`);
+            if (calRes.status === 200) {
+              const calData = await calRes.json();
+              console.log(`   ✓ 正常: カレンダー (${calId}, TimeZone: ${calData.timeZone || 'Asia/Tokyo'}) へのアクセス権限を確認しました！`);
+            } else {
+              const errBody = await calRes.json().catch(() => ({}));
+              console.log(`   ✕ エラー: カレンダー共有アクセス失敗 HTTP ${calRes.status}`);
+              console.log(`     Googleカレンダーの設定で「特定のユーザーとの共有」に ${saEmail} を追加し、権限を「予定の変更権限」にしてください。`);
+              if (errBody.error) console.log(`     詳細: ${errBody.error.message || JSON.stringify(errBody.error)}`);
+            }
+          } catch (calErr) {
+            console.log(`   ✕ カレンダー通信失敗: ${calErr.message}`);
+          }
+        }
+      } else {
+        const errText = await res.text();
+        console.log(`   ✕ エラー: HTTP ${res.status} (${errText.slice(0, 100)})`);
+      }
+    } catch (e) {
+      console.log(`   ✕ サービスアカウント認証処理エラー: ${e.message}`);
+    }
+  } else if (env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET && env.GOOGLE_REFRESH_TOKEN) {
     try {
       const res = await fetch('https://oauth2.googleapis.com/token', {
         method: 'POST',
@@ -148,12 +216,7 @@ async function verify() {
       console.log(`   ✕ 通信失敗: ${e.message}`);
     }
   } else {
-    console.log('\n4. Google Calendar OAuth: 未設定のためスキップ（未設定項目: ' +
-      [
-        !env.GOOGLE_CLIENT_ID && 'GOOGLE_CLIENT_ID',
-        !env.GOOGLE_CLIENT_SECRET && 'GOOGLE_CLIENT_SECRET',
-        !env.GOOGLE_REFRESH_TOKEN && 'GOOGLE_REFRESH_TOKEN'
-      ].filter(Boolean).join(', ') + '）');
+    console.log('\n4. Google Calendar 認証: 未設定のためスキップ（サービスアカウントまたはOAuthを設定してください）');
   }
 }
 

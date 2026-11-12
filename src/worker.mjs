@@ -133,8 +133,11 @@ export function createHandler(fetcher = fetch, clock = Date.now) {
       try { body = JSON.parse(raw); } catch { return new Response('Invalid JSON', { status: 400 }); }
       if (!Array.isArray(body.events) || body.events.length > 100) return new Response('Invalid events', { status: 400 });
       if (!body.events.length) return new Response('OK'); // LINE console's Verify button.
-      const required = ['DB', 'GEMINI_API_KEY', 'LINE_CHANNEL_ACCESS_TOKEN', 'ALLOWED_LINE_USER_ID', 'GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET', 'GOOGLE_REFRESH_TOKEN'];
-      if (required.some(key => !env[key])) return new Response('Configuration incomplete', { status: 503 });
+      const baseRequired = ['DB', 'GEMINI_API_KEY', 'LINE_CHANNEL_ACCESS_TOKEN', 'ALLOWED_LINE_USER_ID'];
+      if (baseRequired.some(key => !env[key])) return new Response('Configuration incomplete', { status: 503 });
+      const hasServiceAccount = !!(env.GOOGLE_SERVICE_ACCOUNT_KEY || (env.GOOGLE_SERVICE_ACCOUNT_EMAIL && env.GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY));
+      const hasOAuth = !!(env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET && env.GOOGLE_REFRESH_TOKEN);
+      if (!hasServiceAccount && !hasOAuth) return new Response('Configuration incomplete', { status: 503 });
       const work = (async () => {
         for (const event of body.events) {
           try { await handleEvent(event, env, fetcher, clock()); }
