@@ -1,0 +1,26 @@
+# ==============================================================================
+# LINE 就活日程調整 Bot 環境変数テンプレート (.dev.vars.example)
+# このファイルをコピーして .dev.vars を作成し、実際の値を設定してください。
+# ==============================================================================
+
+# 1. Gemini API Key (Google AI Studio で取得した API キー)
+GEMINI_API_KEY=
+
+# 2. LINE Messaging API (LINE Developers コンソールで取得)
+# チャネル基本設定 > チャネルシークレット
+LINE_CHANNEL_SECRET=
+# Messaging API設定 > チャネルアクセストークン（長期）
+LINE_CHANNEL_ACCESS_TOKEN=
+# あなたの LINE ユーザーID (Uから始まる33文字、LINE Developersの「あなたのユーザーID」)
+ALLOWED_LINE_USER_ID=
+
+# 3. Google Calendar OAuth 2.0 (Google Cloud コンソールで作成)
+# OAuth 2.0 クライアント ID (...apps.googleusercontent.com)
+GOOGLE_CLIENT_ID=
+# OAuth 2.0 クライアント シークレット
+GOOGLE_CLIENT_SECRET=
+# Google Calendar API 操作用のリフレッシュトークン (1//...)
+GOOGLE_REFRESH_TOKEN=
+
+# 4. 任意設定 (本番 Webhook 疎通検証スクリプト用)
+# WORKER_URL=https://line-job-calendar.<your-subdomain>.workers.dev/webhook
