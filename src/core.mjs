@@ -42,7 +42,7 @@ export function prepareSource(source) {
   text = text.replace(/(?:0\d{1,4}[-ー ]\d{1,4}[-ー ]\d{3,4}|0\d{9,10})(?!\d)/gu, '[電話番号]');
   const hints = urls.map((u, i) => {
     let host = 'unknown';
-    try { host = new URL(u).hostname; } catch {}
+    try { host = new URL(u).hostname; } catch { }
     return { hint: `URL_${i + 1}:${host}`, isMeeting: isMeetingUrl(u), index: i };
   });
   // 会議URLを優先しつつ最大20件に制限
@@ -157,9 +157,11 @@ export function calendarPayload(event, fingerprint) {
     ].join('\n'),
     start: { dateTime: event.start, timeZone: 'Asia/Tokyo' },
     end: { dateTime: event.end, timeZone: 'Asia/Tokyo' },
-    reminders: { useDefault: false, overrides: [
-      { method: 'popup', minutes: prevDay8pmMinutes }, { method: 'popup', minutes: 10 }
-    ] },
+    reminders: {
+      useDefault: false, overrides: [
+        { method: 'popup', minutes: prevDay8pmMinutes }, { method: 'popup', minutes: 10 }
+      ]
+    },
     extendedProperties: { private: { lineJobCalendarFingerprint: fingerprint } }
   };
 }

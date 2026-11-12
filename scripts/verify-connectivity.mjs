@@ -112,7 +112,10 @@ async function verify() {
       const parsed = JSON.parse(env.GOOGLE_SERVICE_ACCOUNT_KEY);
       saEmail = saEmail || parsed.client_email;
       saKey = saKey || parsed.private_key;
-    } catch {}
+    } catch { }
+  }
+  if (saKey) {
+    saKey = saKey.replace(/\\n/g, '\n');
   }
 
   if (saEmail && saKey) {

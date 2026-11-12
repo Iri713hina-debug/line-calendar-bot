@@ -71,14 +71,14 @@ async function main() {
           console.log(`✓ 既存の D1 データベースが見つかりました: ${databaseId}`);
         }
       }
-    } catch {}
+    } catch { }
 
     if (!databaseId) {
       console.log('新規に D1 データベース "line-job-calendar" を作成します...');
       const createOutput = runCapture('npx wrangler d1 create line-job-calendar');
       console.log(createOutput);
       const match = /database_id\s*=\s*"([a-f0-9-]+)"/i.exec(createOutput) ||
-                    /([a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})/i.exec(createOutput);
+        /([a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})/i.exec(createOutput);
       if (match) {
         databaseId = match[1];
       } else {
@@ -161,13 +161,15 @@ async function main() {
     const tempFile = path.resolve(`.temp-secrets-${Date.now()}.json`);
     try {
       const payload = {};
-      for (const k of validKeys) payload[k] = secrets[k];
+      for (const k of validKeys) {
+        payload[k] = k === 'GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY' ? secrets[k].replace(/\\n/g, '\n') : secrets[k];
+      }
       fs.writeFileSync(tempFile, JSON.stringify(payload), 'utf8');
       run(`npx wrangler secret bulk "${tempFile}"`);
       console.log('✓ Cloudflare Secrets を一括登録しました。\n');
     } finally {
       if (fs.existsSync(tempFile)) {
-        try { fs.unlinkSync(tempFile); } catch {}
+        try { fs.unlinkSync(tempFile); } catch { }
       }
     }
   } else {

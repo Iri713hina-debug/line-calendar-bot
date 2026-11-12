@@ -16,14 +16,20 @@ function draftMessage(row, index) {
     '内容を確認し、参加する候補だけ「登録」を押してください。'
   ];
   // Persistent buttons remain available for each candidate after another message arrives.
-  return { type: 'flex', altText: `${e.title}：登録内容を確認`, contents: {
-    type: 'bubble', body: { type: 'box', layout: 'vertical', contents: [
-      { type: 'text', text: lines.join('\n').slice(0, 1900), wrap: true, size: 'sm' }
-    ] }, footer: { type: 'box', layout: 'vertical', spacing: 'sm', contents: [
-      { type: 'button', style: 'primary', action: { type: 'postback', label: '登録', data: `confirm:${row.id}` } },
-      { type: 'button', action: { type: 'postback', label: '取り消す', data: `cancel:${row.id}` } }
-    ] }
-  } };
+  return {
+    type: 'flex', altText: `${e.title}：登録内容を確認`, contents: {
+      type: 'bubble', body: {
+        type: 'box', layout: 'vertical', contents: [
+          { type: 'text', text: lines.join('\n').slice(0, 1900), wrap: true, size: 'sm' }
+        ]
+      }, footer: {
+        type: 'box', layout: 'vertical', spacing: 'sm', contents: [
+          { type: 'button', style: 'primary', action: { type: 'postback', label: '登録', data: `confirm:${row.id}` } },
+          { type: 'button', action: { type: 'postback', label: '取り消す', data: `cancel:${row.id}` } }
+        ]
+      }
+    }
+  };
 }
 
 async function draftsForMessage(env, user, events, now) {

@@ -10,8 +10,10 @@ import { calendarPayload, eventFingerprint, isMeetingUrl, japanDate, normalizeJa
 const NOW = Date.parse('2026-11-09T14:00:00Z');
 const OWNER = 'U' + 'a'.repeat(32);
 const source = '株式会社サンプル 面談 2026年11月20日15:00〜16:00 https://example.com/join?token=PRIVATE test@example.com 090-1234-5678';
-const sampleEvent = () => ({ title: '株式会社サンプル 面談', start: '2026-11-20T15:00:00+09:00',
-  end: '2026-11-20T16:00:00+09:00', location: 'オンライン', urlRefs: ['URL_1'], warnings: [] });
+const sampleEvent = () => ({
+  title: '株式会社サンプル 面談', start: '2026-11-20T15:00:00+09:00',
+  end: '2026-11-20T16:00:00+09:00', location: 'オンライン', urlRefs: ['URL_1'], warnings: []
+});
 const extraction = () => ({ intent: 'new', needsInformation: '', events: [sampleEvent()] });
 const json = (data, status = 200) => new Response(JSON.stringify(data), { status, headers: { 'content-type': 'application/json' } });
 
@@ -19,23 +21,27 @@ const json = (data, status = 200) => new Response(JSON.stringify(data), { status
 function database() {
   const sqlite = new DatabaseSync(':memory:');
   sqlite.exec(readFileSync(new URL('../migrations/0001_init.sql', import.meta.url), 'utf8'));
-  return { sqlite, prepare(sql) {
-    const query = sqlite.prepare(sql);
-    const wrap = args => ({
-      bind: (...values) => wrap(values),
-      first: async () => query.get(...args) || null,
-      run: async () => ({ meta: { changes: Number(query.run(...args).changes) } })
-    });
-    return wrap([]);
-  } };
+  return {
+    sqlite, prepare(sql) {
+      const query = sqlite.prepare(sql);
+      const wrap = args => ({
+        bind: (...values) => wrap(values),
+        first: async () => query.get(...args) || null,
+        run: async () => ({ meta: { changes: Number(query.run(...args).changes) } })
+      });
+      return wrap([]);
+    }
+  };
 }
 
 function fixture(options = {}) {
   const DB = database();
   const calls = [], replies = [], inserted = new Map();
-  const env = { DB, LINE_CHANNEL_SECRET: 'test-signature-secret', LINE_CHANNEL_ACCESS_TOKEN: 'test-line',
+  const env = {
+    DB, LINE_CHANNEL_SECRET: 'test-signature-secret', LINE_CHANNEL_ACCESS_TOKEN: 'test-line',
     ALLOWED_LINE_USER_ID: OWNER, GEMINI_API_KEY: 'test-key', GOOGLE_CLIENT_ID: 'test-client',
-    GOOGLE_CLIENT_SECRET: 'test-client-secret', GOOGLE_REFRESH_TOKEN: 'test-refresh', DAILY_AI_LIMIT: '20' };
+    GOOGLE_CLIENT_SECRET: 'test-client-secret', GOOGLE_REFRESH_TOKEN: 'test-refresh', DAILY_AI_LIMIT: '20'
+  };
   let failInsert = options.failInsertOnce;
   const fetcher = async (url, init) => {
     calls.push({ url, init });
@@ -77,8 +83,10 @@ function fixture(options = {}) {
     await Promise.all(work);
     return response;
   }
-  return { env, calls, replies, inserted, webhook,
-    getDraft: () => DB.sqlite.prepare('SELECT * FROM drafts ORDER BY created_at DESC LIMIT 1').get() };
+  return {
+    env, calls, replies, inserted, webhook,
+    getDraft: () => DB.sqlite.prepare('SELECT * FROM drafts ORDER BY created_at DESC LIMIT 1').get()
+  };
 }
 
 function message(id = 'm1', text = source, user = OWNER) {
@@ -566,6 +574,6 @@ test('worker passes 503 check with service account credentials even when OAuth i
   const signature = createHmac('sha256', env.LINE_CHANNEL_SECRET).update(raw).digest('base64');
   const response = await handler.fetch(new Request('https://bot.example/webhook', {
     method: 'POST', body: raw, headers: { 'x-line-signature': signature }
-  }), env, { waitUntil: () => {} });
+  }), env, { waitUntil: () => { } });
   assert.equal(response.status, 200);
 });

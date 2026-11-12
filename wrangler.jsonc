@@ -4,16 +4,19 @@
   "main": "src/worker.mjs",
   "compatibility_date": "2026-11-09",
   "workers_dev": true,
-  "observability": { "enabled": false },
+  "observability": {
+    "enabled": false
+  },
   "vars": {
     "GEMINI_MODEL": "gemini-3.1-flash-lite",
-    "GOOGLE_CALENDAR_ID": "primary",
     "DAILY_AI_LIMIT": "20"
   },
-  "d1_databases": [{
-    "binding": "DB",
-    "database_name": "line-job-calendar",
-    "database_id": "REPLACE_WITH_YOUR_DATABASE_ID",
-    "migrations_dir": "migrations"
-  }]
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "line-job-calendar",
+      "database_id": "REPLACE_WITH_YOUR_DATABASE_ID",
+      "migrations_dir": "migrations"
+    }
+  ]
 }
